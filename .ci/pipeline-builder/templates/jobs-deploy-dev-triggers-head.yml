@@ -1,0 +1,6 @@
+    - get: <service-name>
+      passed: [ test-<service-name> ]
+      trigger: true
+    - get: common-tasks
+      params: { submodules: [ terraform ] }
+    - get: version

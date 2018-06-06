@@ -1,0 +1,5 @@
+    - test-<service-name>
+    - deploy-dev
+    - integration
+    - deploy-stage
+    - deploy-prod

@@ -1,0 +1,3 @@
+    - get: <service-name>-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }

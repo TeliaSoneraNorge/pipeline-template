@@ -1,0 +1,2 @@
+service-one,TeliaSoneraNorge/service-one,service-one-deploy-key,123456789012.dkr.ecr.eu-west-1.amazonaws.com/myproject/service-one,java
+other-service,TeliaSoneraNorge/other-service,other-service-deploy-key,123456789012.dkr.ecr.eu-west-1.amazonaws.com/myproject/other-service,python

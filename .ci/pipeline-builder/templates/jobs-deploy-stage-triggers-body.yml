@@ -1,0 +1,4 @@
+    - get: <service-name>-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }

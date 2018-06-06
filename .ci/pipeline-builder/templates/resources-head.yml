@@ -1,0 +1,42 @@
+  - name: notify
+    type: slack-notification
+    source:
+      url: ((slack-hook))
+
+  - name: common-tasks
+    type: git
+    source:
+      uri: git@github.com:TeliaSoneraNorge/divx-concourse-tasks.git
+      branch: master
+      private_key: ((aqb-aws-deploy-key))
+
+  - name: <service-name>-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/aqb-aws
+      uri: git@github.com:TeliaSoneraNorge/aqb-aws.git
+      ignore_paths: [ .ci ]
+      access_token: ((github-access-token))
+      private_key: ((aqb-aws-deploy-key))
+      every: true
+
+  - name: <service-name>
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/<service-name>.git
+      branch: master
+      private_key: ((<service-name>-deploy-key))
+
+  # We use a separate resource for writing to work around [ci skip] being ignored.
+  - name: version
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/<service-name>.git
+      branch: master
+      paths: [ terraform ]
+      private_key: ((<service-name>-deploy-key))
+      disable_ci_skip: true
+

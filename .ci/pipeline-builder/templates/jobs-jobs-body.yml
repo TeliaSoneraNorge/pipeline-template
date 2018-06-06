@@ -1,0 +1,81 @@
+- name: test-<service-name>-pr
+  plan:
+  - aggregate:
+    - get: <service-name>-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: <service-name>-pr
+    - get: <infrastructure-service-name>
+  - put: <service-name>-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: <infrastructure-service-name>/.ci/tasks/test.yml
+    input_mapping: { source: <service-name>-pr }
+    on_failure:
+      put: <service-name>-pr
+      params: {path: <service-name>-pr, status: failure}
+  - put: <service-name>-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: test-<service-name>
+  plan:
+  - aggregate:
+    - get: <service-name>
+      trigger: true
+    - get: <infrastructure-service-name>
+  - task: test
+    file: <infrastructure-service-name>/.ci/tasks/test.yml
+    input_mapping: { source: <service-name> }
+    on_failure: *slack-failure
+    
+- name: sonarqube-<service-name>
+  plan:
+  - aggregate:
+    - get: <infrastructure-service-name>
+    - get: <service-name>
+      passed: [ test-<service-name> ]
+      trigger: true
+  - task: sonarqube
+    file: <infrastructure-service-name>/.ci/tasks/sonar-test-python.yml
+    input_mapping: { source: <service-name> }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: <service-name>
+    on_failure: *slack-failure
+
+- name: snyk-<service-name>
+  plan:
+  - aggregate:
+    - get: <infrastructure-service-name>
+    - get: <service-name>
+      passed: [ test-<service-name> ]
+      trigger: true
+  - task: snyk
+    file: <infrastructure-service-name>/.ci/tasks/snyk-test.yml
+    input_mapping: { project: <service-name> }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-<service-name>
+  plan:
+  - aggregate:
+    - get: <infrastructure-service-name>
+    - get: <service-name>
+      passed: [ snyk-<service-name>, sonarqube-<service-name> ]
+      trigger: true
+  - task: create-tag
+    file: <infrastructure-service-name>/.ci/tasks/create-tag.yml
+    input_mapping: { source: <service-name> }
+    on_failure: *slack-failure
+  - put: <service-name>-image
+    params:
+      build: <service-name>
+      tag: tag/image
+      tag_as_latest: false
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+

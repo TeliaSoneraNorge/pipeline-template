@@ -1,0 +1,13 @@
+platform: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: alpine
+    tag: "3.5"
+
+inputs:
+- name: source
+
+run:
+  path: pipeline-repo/concourse/tasks/maven-test/task.sh

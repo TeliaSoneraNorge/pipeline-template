@@ -1,0 +1,46 @@
+- name: test-<service-name>-pr
+  plan:
+  - aggregate:
+    - get: common-tasks
+      params: { submodules: [ terraform ] }
+    - get: <service-name>-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: <service-name>-pr
+  - put: <service-name>-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test-production
+    file: common-tasks/terraform/0.11.3.yml
+    input_mapping: { source: <service-name>-pr }
+    on_failure:
+      put: <service-name>-pr
+      params: {path: <service-name>-pr, status: failure}
+    params:
+      command: test
+      directories: |
+        terraform/development
+        terraform/staging
+        terraform/production
+  - put: <service-name>-pr
+    params: {path: pull-request-write, status: success}
+
+- name: test-<service-name>
+  plan:
+  - aggregate:
+    - get: common-tasks
+      params: { submodules: [ terraform ] }
+    - get: <service-name>
+      trigger: true
+  - task: test
+    on_failure: *slack-failure
+    file: common-tasks/terraform/0.11.3.yml
+    input_mapping: { source: <service-name> }
+    params:
+      command: test
+      directories: |
+        terraform/development
+        terraform/staging
+        terraform/production
+
