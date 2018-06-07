@@ -11,7 +11,7 @@
   - put: <service-name>-pr
     params: {path: pull-request-write, status: pending}
   - task: test
-    file: <infrastructure-service-name>/.ci/tasks/test.yml
+    file: <infrastructure-service-name>/.ci/tasks/test-<project-type>/task.yml
     input_mapping: { source: <service-name>-pr }
     on_failure:
       put: <service-name>-pr
@@ -26,7 +26,7 @@
       trigger: true
     - get: <infrastructure-service-name>
   - task: test
-    file: <infrastructure-service-name>/.ci/tasks/test.yml
+    file: <infrastructure-service-name>/.ci/tasks/test-<project-type>/task.yml
     input_mapping: { source: <service-name> }
     on_failure: *slack-failure
     
@@ -38,7 +38,7 @@
       passed: [ test-<service-name> ]
       trigger: true
   - task: sonarqube
-    file: <infrastructure-service-name>/.ci/tasks/sonar-test-python.yml
+    file: <infrastructure-service-name>/.ci/tasks/sonarqube-<project-type>/task.yml
     input_mapping: { source: <service-name> }
     params:
       sonarqube_url: https://sonarqube.common-services.telia.io
@@ -54,7 +54,7 @@
       passed: [ test-<service-name> ]
       trigger: true
   - task: snyk
-    file: <infrastructure-service-name>/.ci/tasks/snyk-test.yml
+    file: <infrastructure-service-name>/.ci/tasks/snyk-<project-type>/task.yml
     input_mapping: { project: <service-name> }
     params:
       snyk_token: ((snyk-token))
@@ -68,14 +68,14 @@
       passed: [ snyk-<service-name>, sonarqube-<service-name> ]
       trigger: true
   - task: create-tag
-    file: <infrastructure-service-name>/.ci/tasks/create-tag.yml
+    file: <infrastructure-service-name>/.ci/tasks/create-tag/task.yml
     input_mapping: { source: <service-name> }
     on_failure: *slack-failure
   - put: <service-name>-image
     params:
       build: <service-name>
-      tag: tag/image
-      tag_as_latest: false
+      tag_as_latest: true
+      additional_tags: tag/image
     get_params: {skip_download: true}
     on_failure: *slack-failure
 

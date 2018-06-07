@@ -33,6 +33,7 @@ while IFS=, read servicename reponame deploykeyname dockerimagerepo projecttype;
        sed 's#<service-name>#'${servicename}'#g' >> groups-pr-jobs.tmp
      cat templates/jobs-jobs-body.yml |\
        sed 's#<service-name>#'${servicename}'#g' |\
+       sed 's#<project-type>#'${projecttype}'#g' |\
        sed 's#<infrastructure-service-name>#'${infraservicename}'#g' >> jobs-jobs.tmp
      cat templates/jobs-deploy-dev-triggers-body.yml |\
        sed 's#<service-name>#'${servicename}'#g' >> jobs-deploy-dev-triggers.tmp

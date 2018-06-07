@@ -12,5 +12,3 @@
 .ci/pipeline-builder/test.yml
 .ci/pipeline-builder/*.tmp
 .ci/pipeline-builder/test.yml
-.ci/pipeline-builder/microservices.csv
-.ci/pipeline-builder/infrastructure.csv
