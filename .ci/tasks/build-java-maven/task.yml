@@ -1,0 +1,21 @@
+platform: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: maven
+    tag: alpine
+
+inputs:
+  - name: source
+  - name: privacy-aws
+  - name: settings
+
+caches:
+  - path: .m2/
+
+outputs:
+  - name: build-artefacts
+
+run:
+  path: privacy-aws/concourse/tasks/maven-deploy/task.sh
