@@ -5,7 +5,7 @@
       repo: <repo-name>
       uri: git@github.com:<repo-name>.git
       ignore_paths: [ .ci ]
-      access_token: ((github-access-token))
+      access_token: ((teliasoneranorge-access-token))
       private_key: ((<deploy-key-name>))
       every: true
 
