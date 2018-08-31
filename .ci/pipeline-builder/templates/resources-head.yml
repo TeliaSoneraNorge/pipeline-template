@@ -17,7 +17,7 @@
       repo: TeliaSoneraNorge/aqb-aws
       uri: git@github.com:TeliaSoneraNorge/aqb-aws.git
       ignore_paths: [ .ci ]
-      access_token: ((github-access-token))
+      access_token: ((teliasoneranorge-access-token))
       private_key: ((aqb-aws-deploy-key))
       every: true
 
