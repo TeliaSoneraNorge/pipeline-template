@@ -1,11 +1,11 @@
 #!/bin/bash
-if [ "$#" -ne 1 ]; then
-    echo 'Must be called with output filename e.g  ./build-pipeline.sh test.yml'
+if [ "$#" -ne 3 ]; then
+    echo 'Must be called with 3 filename parameters (input-infrastructure, input-microservices and output filename)  e.g  ./build-pipeline.sh infrastructure.csv microservice.csv test.yml'
     exit 1
 fi
 
 IFS=,
-read infraservicename reponame deploykeyname projectname slackchannel < infrastructure.csv
+read infraservicename reponame deploykeyname projectname slackchannel < ${1}
     cat templates/groups-master-jobs-head.yml |\
       sed 's#<service-name>#'${infraservicename}'#g' > groups-master-jobs.tmp
     cat templates/groups-pr-jobs-head.yml |\
@@ -48,7 +48,7 @@ while IFS=, read servicename reponame deploykeyname dockerimagerepo projecttype;
        sed 's#<deploy-key-name>#'${deploykeyname}'#g' |\
        sed 's#<repo-name>#'${reponame}'#g' |\
        sed 's#<docker-image-repository>#'${dockerimagerepo}'#g' >> resources.tmp
-  done < microservices.csv
+  done < ${2}
 
 cat templates/bumping.yml |\
   sed 's#<infrastruture-service-name>#'${infraservicename}'#g' |\
@@ -74,7 +74,7 @@ cat templates/pipeline-template.yml |\
   sed -e '/<bumping-development>/{' -e 'r bumping-dev.tmp' -e 'd' -e'}' |\
   sed -e '/<bumping-staging>/{' -e 'r bumping-stage.tmp' -e 'd' -e'}' |\
   sed -e '/<bumping-production>/{' -e 'r bumping-prod.tmp' -e 'd' -e'}' |\
-  sed -e '/<resources>/{' -e 'r resources.tmp' -e 'd' -e'}' > ${1}
+  sed -e '/<resources>/{' -e 'r resources.tmp' -e 'd' -e'}' > ${3}
 
 rm groups-master-jobs.tmp
 rm groups-pr-jobs.tmp
