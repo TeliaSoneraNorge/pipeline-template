@@ -10,7 +10,7 @@
       branch: master
       private_key: ((aqb-aws-deploy-key))
 
-  - name: <service-name>-pr
+  - name: <infra-service-name>-pr
     type: pull-request
     <<: *webhook-config
     source:
@@ -21,22 +21,22 @@
       private_key: ((aqb-aws-deploy-key))
       every: true
 
-  - name: <service-name>
+  - name: <infra-service-name>
     type: git
     <<: *webhook-config
     source:
-      uri: git@github.com:TeliaSoneraNorge/<service-name>.git
+      uri: git@github.com:TeliaSoneraNorge/<infra-service-name>.git
       branch: master
-      private_key: ((<service-name>-deploy-key))
+      private_key: ((<infra-service-name>-deploy-key))
 
   # We use a separate resource for writing to work around [ci skip] being ignored.
   - name: version
     type: git
     <<: *webhook-config
     source:
-      uri: git@github.com:TeliaSoneraNorge/<service-name>.git
+      uri: git@github.com:TeliaSoneraNorge/<infra-service-name>.git
       branch: master
       paths: [ terraform ]
-      private_key: ((<service-name>-deploy-key))
+      private_key: ((<infra-service-name>-deploy-key))
       disable_ci_skip: true
 

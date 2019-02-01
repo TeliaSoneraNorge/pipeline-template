@@ -1,4 +1,4 @@
-    - get: <service-name>
+    - get: <infra-service-name>
       passed: [ deploy-stage ]
     - get: common-tasks
       params: { submodules: [ terraform ] }

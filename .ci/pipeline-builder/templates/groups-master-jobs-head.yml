@@ -1,4 +1,4 @@
-    - test-<service-name>
+    - test-<infra-service-name>
     - deploy-dev
     - integration
     - deploy-stage

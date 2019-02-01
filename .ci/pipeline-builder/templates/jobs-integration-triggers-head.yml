@@ -1,5 +1,3 @@
-    - get: <service-name>
+    - get: <infra-service-name>
       trigger: true
       passed: [ deploy-dev ]
-    - get: nbiot-adapter
-      trigger: true

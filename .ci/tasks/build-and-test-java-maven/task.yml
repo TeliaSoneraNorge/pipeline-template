@@ -8,8 +8,7 @@ image_resource:
 
 inputs:
   - name: source
-  - name: privacy-aws
-  - name: settings
+  - name: pipeline-repo
 
 caches:
   - path: .m2/

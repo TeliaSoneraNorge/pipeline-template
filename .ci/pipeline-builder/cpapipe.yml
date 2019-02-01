@@ -1,0 +1,1313 @@
+---
+meta:
+  webhook: &webhook-config
+    check_every: 24h
+    webhook_token: <webhook-token>
+  slack: &slack-config
+    username: 'concourse'
+    channel: '#cpa-deploys'
+    icon_url: 'http://cl.ly/image/3e1h0H3H2s0P/concourse-logo.png'
+  failure: &slack-failure
+    put: notify
+    params:
+      <<: *slack-config
+      text: |
+        Build failed:
+        https://concourse.common-services.telia.io/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME
+
+groups:
+  - name: Master
+    jobs:
+    - test-cpa-aws
+    - deploy-dev
+    - integration
+    - deploy-stage
+    - deploy-prod
+    - test-cpa-provision-service
+    - sonarqube-cpa-provision-service
+    - snyk-cpa-provision-service
+    - build-cpa-provision-service
+    - test-cpa-settlement-service
+    - sonarqube-cpa-settlement-service
+    - snyk-cpa-settlement-service
+    - build-cpa-settlement-service
+    - test-cpa-callback-service
+    - sonarqube-cpa-callback-service
+    - snyk-cpa-callback-service
+    - build-cpa-callback-service
+    - test-cpa-api-service
+    - sonarqube-cpa-api-service
+    - snyk-cpa-api-service
+    - build-cpa-api-service
+    - test-cpa-smpp-service
+    - sonarqube-cpa-smpp-service
+    - snyk-cpa-smpp-service
+    - build-cpa-smpp-service
+    - test-cpa-charge-service
+    - sonarqube-cpa-charge-service
+    - snyk-cpa-charge-service
+    - build-cpa-charge-service
+    - test-cpa-message-service
+    - sonarqube-cpa-message-service
+    - snyk-cpa-message-service
+    - build-cpa-message-service
+    - test-cpa-deliver-service
+    - sonarqube-cpa-deliver-service
+    - snyk-cpa-deliver-service
+    - build-cpa-deliver-service
+  - name: PR
+    jobs:
+    - test-cpa-aws-pr
+    - test-cpa-provision-service-pr
+    - test-cpa-settlement-service-pr
+    - test-cpa-callback-service-pr
+    - test-cpa-api-service-pr
+    - test-cpa-smpp-service-pr
+    - test-cpa-charge-service-pr
+    - test-cpa-message-service-pr
+    - test-cpa-deliver-service-pr
+
+jobs:
+- name: test-cpa-aws-pr
+  plan:
+  - aggregate:
+    - get: common-tasks
+      params: { submodules: [ terraform ] }
+    - get: cpa-aws-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-aws-pr
+  - put: cpa-aws-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test-production
+    file: common-tasks/terraform/0.11.11.yml
+    input_mapping: { source: cpa-aws-pr }
+    on_failure:
+      put: cpa-aws-pr
+      params: {path: cpa-aws-pr, status: failure}
+    params:
+      command: test
+      directories: |
+        terraform/development
+        terraform/staging
+        terraform/production
+  - put: cpa-aws-pr
+    params: {path: pull-request-write, status: success}
+
+- name: test-cpa-aws
+  plan:
+  - aggregate:
+    - get: common-tasks
+      params: { submodules: [ terraform ] }
+    - get: cpa-aws
+      trigger: true
+  - task: test
+    on_failure: *slack-failure
+    file: common-tasks/terraform/0.11.11.yml
+    input_mapping: { source: cpa-aws }
+    params:
+      command: test
+      directories: |
+        terraform/development
+        terraform/staging
+        terraform/production
+
+- name: test-cpa-provision-service-pr
+  plan:
+  - aggregate:
+    - get: cpa-provision-service-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-provision-service-pr
+    - get: cpa-aws
+  - put: cpa-provision-service-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: cpa-aws/.ci/tasks/test-java/task.yml
+    input_mapping: { source: cpa-provision-service-pr }
+    on_failure:
+      put: cpa-provision-service-pr
+      params: {path: cpa-provision-service-pr, status: failure}
+  - put: cpa-provision-service-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: build-and-test-cpa-provision-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-provision-service
+      trigger: true
+    - get: cpa-aws
+  - task: test
+    file: cpa-aws/.ci/tasks/build-and-test-java/task.yml
+    input_mapping:
+      source: cpa-provision-service
+      pipeline-repo: cpa-aws
+    output_mapping:
+      build-artefacts: build-artefacts-cpa-provision-service
+    on_failure: *slack-failure
+    
+- name: sonarqube-cpa-provision-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-provision-service
+      passed: [ test-cpa-provision-service ]
+      trigger: true
+  - task: sonarqube
+    file: cpa-aws/.ci/tasks/sonarqube-java/task.yml
+    input_mapping: { source: cpa-provision-service }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: cpa-provision-service
+    on_failure: *slack-failure
+
+- name: snyk-cpa-provision-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-provision-service
+      passed: [ test-cpa-provision-service ]
+      trigger: true
+  - task: snyk
+    file: cpa-aws/.ci/tasks/snyk-java/task.yml
+    input_mapping: { project: cpa-provision-service }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-image-cpa-provision-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-provision-service
+      passed: [ snyk-cpa-provision-service, sonarqube-cpa-provision-service ]
+      trigger: true
+  - task: create-tag
+    file: cpa-aws/.ci/tasks/create-tag/task.yml
+    input_mapping: { source: cpa-provision-service }
+    on_failure: *slack-failure
+  - put: cpa-provision-service-image
+    params:
+      build: build-artefacts-cpa-provision-service
+      tag_as_latest: true
+      additional_tags: tag/image
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+
+- name: test-cpa-settlement-service-pr
+  plan:
+  - aggregate:
+    - get: cpa-settlement-service-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-settlement-service-pr
+    - get: cpa-aws
+  - put: cpa-settlement-service-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: cpa-aws/.ci/tasks/test-java/task.yml
+    input_mapping: { source: cpa-settlement-service-pr }
+    on_failure:
+      put: cpa-settlement-service-pr
+      params: {path: cpa-settlement-service-pr, status: failure}
+  - put: cpa-settlement-service-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: build-and-test-cpa-settlement-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-settlement-service
+      trigger: true
+    - get: cpa-aws
+  - task: test
+    file: cpa-aws/.ci/tasks/build-and-test-java/task.yml
+    input_mapping:
+      source: cpa-settlement-service
+      pipeline-repo: cpa-aws
+    output_mapping:
+      build-artefacts: build-artefacts-cpa-settlement-service
+    on_failure: *slack-failure
+    
+- name: sonarqube-cpa-settlement-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-settlement-service
+      passed: [ test-cpa-settlement-service ]
+      trigger: true
+  - task: sonarqube
+    file: cpa-aws/.ci/tasks/sonarqube-java/task.yml
+    input_mapping: { source: cpa-settlement-service }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: cpa-settlement-service
+    on_failure: *slack-failure
+
+- name: snyk-cpa-settlement-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-settlement-service
+      passed: [ test-cpa-settlement-service ]
+      trigger: true
+  - task: snyk
+    file: cpa-aws/.ci/tasks/snyk-java/task.yml
+    input_mapping: { project: cpa-settlement-service }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-image-cpa-settlement-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-settlement-service
+      passed: [ snyk-cpa-settlement-service, sonarqube-cpa-settlement-service ]
+      trigger: true
+  - task: create-tag
+    file: cpa-aws/.ci/tasks/create-tag/task.yml
+    input_mapping: { source: cpa-settlement-service }
+    on_failure: *slack-failure
+  - put: cpa-settlement-service-image
+    params:
+      build: build-artefacts-cpa-settlement-service
+      tag_as_latest: true
+      additional_tags: tag/image
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+
+- name: test-cpa-callback-service-pr
+  plan:
+  - aggregate:
+    - get: cpa-callback-service-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-callback-service-pr
+    - get: cpa-aws
+  - put: cpa-callback-service-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: cpa-aws/.ci/tasks/test-java/task.yml
+    input_mapping: { source: cpa-callback-service-pr }
+    on_failure:
+      put: cpa-callback-service-pr
+      params: {path: cpa-callback-service-pr, status: failure}
+  - put: cpa-callback-service-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: build-and-test-cpa-callback-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-callback-service
+      trigger: true
+    - get: cpa-aws
+  - task: test
+    file: cpa-aws/.ci/tasks/build-and-test-java/task.yml
+    input_mapping:
+      source: cpa-callback-service
+      pipeline-repo: cpa-aws
+    output_mapping:
+      build-artefacts: build-artefacts-cpa-callback-service
+    on_failure: *slack-failure
+    
+- name: sonarqube-cpa-callback-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-callback-service
+      passed: [ test-cpa-callback-service ]
+      trigger: true
+  - task: sonarqube
+    file: cpa-aws/.ci/tasks/sonarqube-java/task.yml
+    input_mapping: { source: cpa-callback-service }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: cpa-callback-service
+    on_failure: *slack-failure
+
+- name: snyk-cpa-callback-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-callback-service
+      passed: [ test-cpa-callback-service ]
+      trigger: true
+  - task: snyk
+    file: cpa-aws/.ci/tasks/snyk-java/task.yml
+    input_mapping: { project: cpa-callback-service }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-image-cpa-callback-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-callback-service
+      passed: [ snyk-cpa-callback-service, sonarqube-cpa-callback-service ]
+      trigger: true
+  - task: create-tag
+    file: cpa-aws/.ci/tasks/create-tag/task.yml
+    input_mapping: { source: cpa-callback-service }
+    on_failure: *slack-failure
+  - put: cpa-callback-service-image
+    params:
+      build: build-artefacts-cpa-callback-service
+      tag_as_latest: true
+      additional_tags: tag/image
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+
+- name: test-cpa-api-service-pr
+  plan:
+  - aggregate:
+    - get: cpa-api-service-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-api-service-pr
+    - get: cpa-aws
+  - put: cpa-api-service-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: cpa-aws/.ci/tasks/test-java/task.yml
+    input_mapping: { source: cpa-api-service-pr }
+    on_failure:
+      put: cpa-api-service-pr
+      params: {path: cpa-api-service-pr, status: failure}
+  - put: cpa-api-service-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: build-and-test-cpa-api-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-api-service
+      trigger: true
+    - get: cpa-aws
+  - task: test
+    file: cpa-aws/.ci/tasks/build-and-test-java/task.yml
+    input_mapping:
+      source: cpa-api-service
+      pipeline-repo: cpa-aws
+    output_mapping:
+      build-artefacts: build-artefacts-cpa-api-service
+    on_failure: *slack-failure
+    
+- name: sonarqube-cpa-api-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-api-service
+      passed: [ test-cpa-api-service ]
+      trigger: true
+  - task: sonarqube
+    file: cpa-aws/.ci/tasks/sonarqube-java/task.yml
+    input_mapping: { source: cpa-api-service }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: cpa-api-service
+    on_failure: *slack-failure
+
+- name: snyk-cpa-api-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-api-service
+      passed: [ test-cpa-api-service ]
+      trigger: true
+  - task: snyk
+    file: cpa-aws/.ci/tasks/snyk-java/task.yml
+    input_mapping: { project: cpa-api-service }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-image-cpa-api-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-api-service
+      passed: [ snyk-cpa-api-service, sonarqube-cpa-api-service ]
+      trigger: true
+  - task: create-tag
+    file: cpa-aws/.ci/tasks/create-tag/task.yml
+    input_mapping: { source: cpa-api-service }
+    on_failure: *slack-failure
+  - put: cpa-api-service-image
+    params:
+      build: build-artefacts-cpa-api-service
+      tag_as_latest: true
+      additional_tags: tag/image
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+
+- name: test-cpa-smpp-service-pr
+  plan:
+  - aggregate:
+    - get: cpa-smpp-service-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-smpp-service-pr
+    - get: cpa-aws
+  - put: cpa-smpp-service-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: cpa-aws/.ci/tasks/test-java/task.yml
+    input_mapping: { source: cpa-smpp-service-pr }
+    on_failure:
+      put: cpa-smpp-service-pr
+      params: {path: cpa-smpp-service-pr, status: failure}
+  - put: cpa-smpp-service-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: build-and-test-cpa-smpp-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-smpp-service
+      trigger: true
+    - get: cpa-aws
+  - task: test
+    file: cpa-aws/.ci/tasks/build-and-test-java/task.yml
+    input_mapping:
+      source: cpa-smpp-service
+      pipeline-repo: cpa-aws
+    output_mapping:
+      build-artefacts: build-artefacts-cpa-smpp-service
+    on_failure: *slack-failure
+    
+- name: sonarqube-cpa-smpp-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-smpp-service
+      passed: [ test-cpa-smpp-service ]
+      trigger: true
+  - task: sonarqube
+    file: cpa-aws/.ci/tasks/sonarqube-java/task.yml
+    input_mapping: { source: cpa-smpp-service }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: cpa-smpp-service
+    on_failure: *slack-failure
+
+- name: snyk-cpa-smpp-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-smpp-service
+      passed: [ test-cpa-smpp-service ]
+      trigger: true
+  - task: snyk
+    file: cpa-aws/.ci/tasks/snyk-java/task.yml
+    input_mapping: { project: cpa-smpp-service }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-image-cpa-smpp-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-smpp-service
+      passed: [ snyk-cpa-smpp-service, sonarqube-cpa-smpp-service ]
+      trigger: true
+  - task: create-tag
+    file: cpa-aws/.ci/tasks/create-tag/task.yml
+    input_mapping: { source: cpa-smpp-service }
+    on_failure: *slack-failure
+  - put: cpa-smpp-service-image
+    params:
+      build: build-artefacts-cpa-smpp-service
+      tag_as_latest: true
+      additional_tags: tag/image
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+
+- name: test-cpa-charge-service-pr
+  plan:
+  - aggregate:
+    - get: cpa-charge-service-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-charge-service-pr
+    - get: cpa-aws
+  - put: cpa-charge-service-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: cpa-aws/.ci/tasks/test-java/task.yml
+    input_mapping: { source: cpa-charge-service-pr }
+    on_failure:
+      put: cpa-charge-service-pr
+      params: {path: cpa-charge-service-pr, status: failure}
+  - put: cpa-charge-service-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: build-and-test-cpa-charge-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-charge-service
+      trigger: true
+    - get: cpa-aws
+  - task: test
+    file: cpa-aws/.ci/tasks/build-and-test-java/task.yml
+    input_mapping:
+      source: cpa-charge-service
+      pipeline-repo: cpa-aws
+    output_mapping:
+      build-artefacts: build-artefacts-cpa-charge-service
+    on_failure: *slack-failure
+    
+- name: sonarqube-cpa-charge-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-charge-service
+      passed: [ test-cpa-charge-service ]
+      trigger: true
+  - task: sonarqube
+    file: cpa-aws/.ci/tasks/sonarqube-java/task.yml
+    input_mapping: { source: cpa-charge-service }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: cpa-charge-service
+    on_failure: *slack-failure
+
+- name: snyk-cpa-charge-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-charge-service
+      passed: [ test-cpa-charge-service ]
+      trigger: true
+  - task: snyk
+    file: cpa-aws/.ci/tasks/snyk-java/task.yml
+    input_mapping: { project: cpa-charge-service }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-image-cpa-charge-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-charge-service
+      passed: [ snyk-cpa-charge-service, sonarqube-cpa-charge-service ]
+      trigger: true
+  - task: create-tag
+    file: cpa-aws/.ci/tasks/create-tag/task.yml
+    input_mapping: { source: cpa-charge-service }
+    on_failure: *slack-failure
+  - put: cpa-charge-service-image
+    params:
+      build: build-artefacts-cpa-charge-service
+      tag_as_latest: true
+      additional_tags: tag/image
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+
+- name: test-cpa-message-service-pr
+  plan:
+  - aggregate:
+    - get: cpa-message-service-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-message-service-pr
+    - get: cpa-aws
+  - put: cpa-message-service-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: cpa-aws/.ci/tasks/test-java/task.yml
+    input_mapping: { source: cpa-message-service-pr }
+    on_failure:
+      put: cpa-message-service-pr
+      params: {path: cpa-message-service-pr, status: failure}
+  - put: cpa-message-service-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: build-and-test-cpa-message-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-message-service
+      trigger: true
+    - get: cpa-aws
+  - task: test
+    file: cpa-aws/.ci/tasks/build-and-test-java/task.yml
+    input_mapping:
+      source: cpa-message-service
+      pipeline-repo: cpa-aws
+    output_mapping:
+      build-artefacts: build-artefacts-cpa-message-service
+    on_failure: *slack-failure
+    
+- name: sonarqube-cpa-message-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-message-service
+      passed: [ test-cpa-message-service ]
+      trigger: true
+  - task: sonarqube
+    file: cpa-aws/.ci/tasks/sonarqube-java/task.yml
+    input_mapping: { source: cpa-message-service }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: cpa-message-service
+    on_failure: *slack-failure
+
+- name: snyk-cpa-message-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-message-service
+      passed: [ test-cpa-message-service ]
+      trigger: true
+  - task: snyk
+    file: cpa-aws/.ci/tasks/snyk-java/task.yml
+    input_mapping: { project: cpa-message-service }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-image-cpa-message-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-message-service
+      passed: [ snyk-cpa-message-service, sonarqube-cpa-message-service ]
+      trigger: true
+  - task: create-tag
+    file: cpa-aws/.ci/tasks/create-tag/task.yml
+    input_mapping: { source: cpa-message-service }
+    on_failure: *slack-failure
+  - put: cpa-message-service-image
+    params:
+      build: build-artefacts-cpa-message-service
+      tag_as_latest: true
+      additional_tags: tag/image
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+
+- name: test-cpa-deliver-service-pr
+  plan:
+  - aggregate:
+    - get: cpa-deliver-service-pr
+      trigger: true
+      version: every
+      params: {fetch_merge: true}
+    - get: pull-request-write
+      resource: cpa-deliver-service-pr
+    - get: cpa-aws
+  - put: cpa-deliver-service-pr
+    params: {path: pull-request-write, status: pending}
+  - task: test
+    file: cpa-aws/.ci/tasks/test-java/task.yml
+    input_mapping: { source: cpa-deliver-service-pr }
+    on_failure:
+      put: cpa-deliver-service-pr
+      params: {path: cpa-deliver-service-pr, status: failure}
+  - put: cpa-deliver-service-pr
+    params: {path: pull-request-write, status: success}
+    
+- name: build-and-test-cpa-deliver-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-deliver-service
+      trigger: true
+    - get: cpa-aws
+  - task: test
+    file: cpa-aws/.ci/tasks/build-and-test-java/task.yml
+    input_mapping:
+      source: cpa-deliver-service
+      pipeline-repo: cpa-aws
+    output_mapping:
+      build-artefacts: build-artefacts-cpa-deliver-service
+    on_failure: *slack-failure
+    
+- name: sonarqube-cpa-deliver-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-deliver-service
+      passed: [ test-cpa-deliver-service ]
+      trigger: true
+  - task: sonarqube
+    file: cpa-aws/.ci/tasks/sonarqube-java/task.yml
+    input_mapping: { source: cpa-deliver-service }
+    params:
+      sonarqube_url: https://sonarqube.common-services.telia.io
+      sonarqube_token: ((sonarqube-token-prod))
+      project_name: cpa-deliver-service
+    on_failure: *slack-failure
+
+- name: snyk-cpa-deliver-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-deliver-service
+      passed: [ test-cpa-deliver-service ]
+      trigger: true
+  - task: snyk
+    file: cpa-aws/.ci/tasks/snyk-java/task.yml
+    input_mapping: { project: cpa-deliver-service }
+    params:
+      snyk_token: ((snyk-token))
+    on_failure: *slack-failure
+    
+- name: build-image-cpa-deliver-service
+  plan:
+  - aggregate:
+    - get: cpa-aws
+    - get: cpa-deliver-service
+      passed: [ snyk-cpa-deliver-service, sonarqube-cpa-deliver-service ]
+      trigger: true
+  - task: create-tag
+    file: cpa-aws/.ci/tasks/create-tag/task.yml
+    input_mapping: { source: cpa-deliver-service }
+    on_failure: *slack-failure
+  - put: cpa-deliver-service-image
+    params:
+      build: build-artefacts-cpa-deliver-service
+      tag_as_latest: true
+      additional_tags: tag/image
+    get_params: {skip_download: true}
+    on_failure: *slack-failure
+
+- name: deploy-dev
+  serial: true
+  plan:
+  - aggregate:
+    - get: cpa-aws
+      passed: [ test-cpa-aws ]
+      trigger: true
+    - get: common-tasks
+      params: { submodules: [ terraform ] }
+    - get: version
+    - get: cpa-provision-service-image
+      passed: [ build-cpa-provision-service ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-settlement-service-image
+      passed: [ build-cpa-settlement-service ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-callback-service-image
+      passed: [ build-cpa-callback-service ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-api-service-image
+      passed: [ build-cpa-api-service ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-smpp-service-image
+      passed: [ build-cpa-smpp-service ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-charge-service-image
+      passed: [ build-cpa-charge-service ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-message-service-image
+      passed: [ build-cpa-message-service ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-deliver-service-image
+      passed: [ build-cpa-deliver-service ]
+      trigger: true
+      params: { skip_download: true }
+  - aggregate:
+    - task: bump-version
+      file: cpa-aws/.ci/tasks/bump-version.yml
+      input_mapping: { source: version }
+      output_mapping: { bumped-source: bumped-version }
+      params: { environment: developement }
+    - task: bump-source
+      file: cpa-aws/.ci/tasks/bump-version.yml
+      input_mapping: { source: cpa-aws }
+      params: { environment: developement }
+  - put: version
+    params:
+      repository: bumped-version/
+      rebase: true
+  - task: deploy
+    attempts: 2
+    file: common-tasks/terraform/0.11.11.yml
+    input_mapping: { source: bumped-source }
+    params:
+      command: apply
+      directories: terraform/development
+      access_key: ((telia-no-cpa-dev-access-key))
+      secret_key: ((telia-no-cpa-dev-secret-key))
+      session_token: ((telia-no-cpa-dev-session-token))
+    on_failure: *slack-failure
+
+- name: integration
+  plan:
+  - aggregate:
+    - get: cpa-aws
+      trigger: true
+      passed: [ deploy-dev ]
+    - get: cpa-provision-service-image
+      passed: [ deploy-dev ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-settlement-service-image
+      passed: [ deploy-dev ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-callback-service-image
+      passed: [ deploy-dev ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-api-service-image
+      passed: [ deploy-dev ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-smpp-service-image
+      passed: [ deploy-dev ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-charge-service-image
+      passed: [ deploy-dev ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-message-service-image
+      passed: [ deploy-dev ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-deliver-service-image
+      passed: [ deploy-dev ]
+      trigger: true
+      params: { skip_download: true }
+  - aggregate:
+    - task: integration-tests
+      file: cpa-aws/.ci/tasks/integration-tests/task.yml
+      input_mapping: { source: cpa-aws }
+      on_failure: *slack-failure
+
+- name: deploy-stage
+  serial: true
+  plan:
+  - aggregate:
+    - get: cpa-aws
+      trigger: true
+      passed: [ integration ]
+    - get: common-tasks
+      params: { submodules: [ terraform ] }
+    - get: version
+    - get: cpa-provision-service-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-settlement-service-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-callback-service-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-api-service-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-smpp-service-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-charge-service-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-message-service-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }
+    - get: cpa-deliver-service-image
+      passed: [ integration ]
+      trigger: true
+      params: { skip_download: true }
+  - aggregate:
+    - task: bump-version
+      file: cpa-aws/.ci/tasks/bump-version.yml
+      input_mapping: { source: version }
+      output_mapping: { bumped-source: bumped-version }
+      params: { environment: staging }
+    - task: bump-source
+      file: cpa-aws/.ci/tasks/bump-version.yml
+      input_mapping: { source: cpa-aws }
+      params: { environment: staging }
+  - put: version
+    params:
+      repository: bumped-version/
+      rebase: true
+  - task: deploy
+    attempts: 2
+    file: common-tasks/terraform/0.11.11.yml
+    input_mapping: { source: bumped-source }
+    params:
+      command: apply
+      directories: terraform/staging
+      access_key: ((telia-no-cpa-stage-access-key))
+      secret_key: ((telia-no-cpa-stage-secret-key))
+      session_token: ((telia-no-cpa-stage-session-token))
+    on_failure: *slack-failure
+
+- name: deploy-prod
+  serial: true
+  plan:
+  - aggregate:
+    - get: cpa-aws
+      passed: [ deploy-stage ]
+    - get: common-tasks
+      params: { submodules: [ terraform ] }
+    - get: version
+    - get: cpa-provision-service-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }
+    - get: cpa-settlement-service-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }
+    - get: cpa-callback-service-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }
+    - get: cpa-api-service-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }
+    - get: cpa-smpp-service-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }
+    - get: cpa-charge-service-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }
+    - get: cpa-message-service-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }
+    - get: cpa-deliver-service-image
+      passed: [ deploy-stage ]
+      params: { skip_download: true }
+  - aggregate:
+    - task: bump-version
+      file: cpa-aws/.ci/tasks/bump-version.yml
+      input_mapping: { source: version }
+      output_mapping: { bumped-source: bumped-version }
+      params: { environment: production }
+    - task: bump-source
+      file: cpa-aws/.ci/tasks/bump-version.yml
+      input_mapping: { source: cpa-aws }
+      params: { environment: production }
+  - put: version
+    params:
+      repository: bumped-version/
+      rebase: true
+  - task: deploy
+    attempts: 2
+    file: common-tasks/terraform/0.11.11.yml
+    input_mapping: { source: bumped-source }
+    params:
+      command: apply
+      directories: terraform/production
+      access_key: ((telia-no-cpa-prod-access-key))
+      secret_key: ((telia-no-cpa-prod-secret-key))
+      session_token: ((telia-no-cpa-prod-session-token))
+    on_failure: *slack-failure
+
+resource_types:
+  - name: slack-notification
+    type: docker-image
+    source:
+      repository: cfcommunity/slack-notification-resource
+      tag: latest
+  - name: pull-request
+    type: docker-image
+    source:
+      repository: jtarchie/pr
+
+resources:
+  - name: notify
+    type: slack-notification
+    source:
+      url: ((slack-hook))
+
+  - name: common-tasks
+    type: git
+    source:
+      uri: git@github.com:TeliaSoneraNorge/divx-concourse-tasks.git
+      branch: master
+      private_key: ((aqb-aws-deploy-key))
+
+  - name: cpa-aws-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/aqb-aws
+      uri: git@github.com:TeliaSoneraNorge/aqb-aws.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((aqb-aws-deploy-key))
+      every: true
+
+  - name: cpa-aws
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-aws.git
+      branch: master
+      private_key: ((cpa-aws-deploy-key))
+
+  # We use a separate resource for writing to work around [ci skip] being ignored.
+  - name: version
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-aws.git
+      branch: master
+      paths: [ terraform ]
+      private_key: ((cpa-aws-deploy-key))
+      disable_ci_skip: true
+
+  - name: cpa-provision-service-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/cpa-provision-service
+      uri: git@github.com:TeliaSoneraNorge/cpa-provision-service.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((cpa-provision-service-deploy-key))
+      every: true
+
+  - name: cpa-provision-service
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-provision-service.git
+      branch: master
+      private_key: ((cpa-provision-service-deploy-key))
+
+  - name: cpa-provision-service-image
+    type: docker-image
+    source:
+      repository: "358107645737.dkr.ecr.eu-west-1.amazonaws.com/cpa-provision-service"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
+  - name: cpa-settlement-service-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/cpa-settlement-service
+      uri: git@github.com:TeliaSoneraNorge/cpa-settlement-service.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((cpa-settlement-service-deploy-key))
+      every: true
+
+  - name: cpa-settlement-service
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-settlement-service.git
+      branch: master
+      private_key: ((cpa-settlement-service-deploy-key))
+
+  - name: cpa-settlement-service-image
+    type: docker-image
+    source:
+      repository: "358107645737.dkr.ecr.eu-west-1.amazonaws.com/cpa-settlement-service"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
+  - name: cpa-callback-service-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/cpa-callback-service
+      uri: git@github.com:TeliaSoneraNorge/cpa-callback-service.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((cpa-callback-service-deploy-key))
+      every: true
+
+  - name: cpa-callback-service
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-callback-service.git
+      branch: master
+      private_key: ((cpa-callback-service-deploy-key))
+
+  - name: cpa-callback-service-image
+    type: docker-image
+    source:
+      repository: "358107645737.dkr.ecr.eu-west-1.amazonaws.com/cpa-callback-service"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
+  - name: cpa-api-service-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/cpa-api-service
+      uri: git@github.com:TeliaSoneraNorge/cpa-api-service.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((cpa-callback-service-deploy-key))
+      every: true
+
+  - name: cpa-api-service
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-api-service.git
+      branch: master
+      private_key: ((cpa-callback-service-deploy-key))
+
+  - name: cpa-api-service-image
+    type: docker-image
+    source:
+      repository: "358107645737.dkr.ecr.eu-west-1.amazonaws.com/cpa-api-service"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
+  - name: cpa-smpp-service-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/cpa-smpp-service
+      uri: git@github.com:TeliaSoneraNorge/cpa-smpp-service.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((cpa-smpp-service-deploy-key))
+      every: true
+
+  - name: cpa-smpp-service
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-smpp-service.git
+      branch: master
+      private_key: ((cpa-smpp-service-deploy-key))
+
+  - name: cpa-smpp-service-image
+    type: docker-image
+    source:
+      repository: "358107645737.dkr.ecr.eu-west-1.amazonaws.com/cpa-smpp-service"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
+  - name: cpa-charge-service-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/cpa-charge-service
+      uri: git@github.com:TeliaSoneraNorge/cpa-charge-service.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((cpa-charge-service-deploy-key))
+      every: true
+
+  - name: cpa-charge-service
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-charge-service.git
+      branch: master
+      private_key: ((cpa-charge-service-deploy-key))
+
+  - name: cpa-charge-service-image
+    type: docker-image
+    source:
+      repository: "358107645737.dkr.ecr.eu-west-1.amazonaws.com/cpa-charge-service"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
+  - name: cpa-message-service-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/cpa-message-service
+      uri: git@github.com:TeliaSoneraNorge/cpa-message-service.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((cpa-message-service-deploy-key))
+      every: true
+
+  - name: cpa-message-service
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-message-service.git
+      branch: master
+      private_key: ((cpa-message-service-deploy-key))
+
+  - name: cpa-message-service-image
+    type: docker-image
+    source:
+      repository: "358107645737.dkr.ecr.eu-west-1.amazonaws.com/cpa-message-service"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
+  - name: cpa-deliver-service-pr
+    type: pull-request
+    <<: *webhook-config
+    source:
+      repo: TeliaSoneraNorge/cpa-deliver-service
+      uri: git@github.com:TeliaSoneraNorge/cpa-deliver-service.git
+      ignore_paths: [ .ci ]
+      access_token: ((teliasoneranorge-access-token))
+      private_key: ((cpa-deliver-service-deploy-key))
+      every: true
+
+  - name: cpa-deliver-service
+    type: git
+    <<: *webhook-config
+    source:
+      uri: git@github.com:TeliaSoneraNorge/cpa-deliver-service.git
+      branch: master
+      private_key: ((cpa-deliver-service-deploy-key))
+
+  - name: cpa-deliver-service-image
+    type: docker-image
+    source:
+      repository: "358107645737.dkr.ecr.eu-west-1.amazonaws.com/cpa-deliver-service"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
