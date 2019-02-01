@@ -1,4 +1,4 @@
-    - get: <service-name>
+    - get: <infra-service-name>
       trigger: true
       passed: [ integration ]
     - get: common-tasks

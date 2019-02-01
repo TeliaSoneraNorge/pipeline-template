@@ -1,42 +1,42 @@
-- name: test-<service-name>-pr
+- name: test-<infra-service-name>-pr
   plan:
   - aggregate:
     - get: common-tasks
       params: { submodules: [ terraform ] }
-    - get: <service-name>-pr
+    - get: <infra-service-name>-pr
       trigger: true
       version: every
       params: {fetch_merge: true}
     - get: pull-request-write
-      resource: <service-name>-pr
-  - put: <service-name>-pr
+      resource: <infra-service-name>-pr
+  - put: <infra-service-name>-pr
     params: {path: pull-request-write, status: pending}
   - task: test-production
-    file: common-tasks/terraform/0.11.3.yml
-    input_mapping: { source: <service-name>-pr }
+    file: common-tasks/terraform/0.11.11.yml
+    input_mapping: { source: <infra-service-name>-pr }
     on_failure:
-      put: <service-name>-pr
-      params: {path: <service-name>-pr, status: failure}
+      put: <infra-service-name>-pr
+      params: {path: <infra-service-name>-pr, status: failure}
     params:
       command: test
       directories: |
         terraform/development
         terraform/staging
         terraform/production
-  - put: <service-name>-pr
+  - put: <infra-service-name>-pr
     params: {path: pull-request-write, status: success}
 
-- name: test-<service-name>
+- name: test-<infra-service-name>
   plan:
   - aggregate:
     - get: common-tasks
       params: { submodules: [ terraform ] }
-    - get: <service-name>
+    - get: <infra-service-name>
       trigger: true
   - task: test
     on_failure: *slack-failure
-    file: common-tasks/terraform/0.11.3.yml
-    input_mapping: { source: <service-name> }
+    file: common-tasks/terraform/0.11.11.yml
+    input_mapping: { source: <infra-service-name> }
     params:
       command: test
       directories: |

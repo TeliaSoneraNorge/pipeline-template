@@ -7,21 +7,21 @@ fi
 IFS=,
 read infraservicename reponame deploykeyname projectname slackchannel < ${1}
     cat templates/groups-master-jobs-head.yml |\
-      sed 's#<service-name>#'${infraservicename}'#g' > groups-master-jobs.tmp
+      sed 's#<infra-service-name>#'${infraservicename}'#g' > groups-master-jobs.tmp
     cat templates/groups-pr-jobs-head.yml |\
-      sed 's#<service-name>#'${infraservicename}'#g' > groups-pr-jobs.tmp
+      sed 's#<infra-service-name>#'${infraservicename}'#g' > groups-pr-jobs.tmp
     cat templates/jobs-jobs-head.yml |\
-      sed 's#<service-name>#'${infraservicename}'#g' > jobs-jobs.tmp
+      sed 's#<infra-service-name>#'${infraservicename}'#g' > jobs-jobs.tmp
     cat templates/jobs-deploy-dev-triggers-head.yml |\
-      sed 's#<service-name>#'${infraservicename}'#g' > jobs-deploy-dev-triggers.tmp
+      sed 's#<infra-service-name>#'${infraservicename}'#g' > jobs-deploy-dev-triggers.tmp
     cat templates/jobs-integration-triggers-head.yml |\
-      sed 's#<service-name>#'${infraservicename}'#g' > jobs-integration-triggers.tmp
+      sed 's#<infra-service-name>#'${infraservicename}'#g' > jobs-integration-triggers.tmp
     cat templates/jobs-deploy-stage-triggers-head.yml |\
-      sed 's#<service-name>#'${infraservicename}'#g' > jobs-deploy-stage-triggers.tmp
+      sed 's#<infra-service-name>#'${infraservicename}'#g' > jobs-deploy-stage-triggers.tmp
     cat templates/jobs-deploy-prod-triggers-head.yml |\
-      sed 's#<service-name>#'${infraservicename}'#g' > jobs-deploy-prod-triggers.tmp
+      sed 's#<infra-service-name>#'${infraservicename}'#g' > jobs-deploy-prod-triggers.tmp
     cat templates/resources-head.yml |\
-      sed 's#<service-name>#'${infraservicename}'#g' |\
+      sed 's#<infra-service-name>#'${infraservicename}'#g' |\
       sed 's#<deploy-key-name>#'${deploykeyname}'#g' |\
       sed 's#<repo-name>#'${reponame}'#g' > resources.tmp
 

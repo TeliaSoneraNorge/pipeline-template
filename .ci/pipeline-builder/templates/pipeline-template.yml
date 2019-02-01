@@ -38,7 +38,7 @@ jobs:
       rebase: true
   - task: deploy
     attempts: 2
-    file: common-tasks/terraform/0.11.3.yml
+    file: common-tasks/terraform/0.11.11.yml
     input_mapping: { source: bumped-source }
     params:
       command: apply
@@ -71,7 +71,7 @@ jobs:
       rebase: true
   - task: deploy
     attempts: 2
-    file: common-tasks/terraform/0.11.3.yml
+    file: common-tasks/terraform/0.11.11.yml
     input_mapping: { source: bumped-source }
     params:
       command: apply
@@ -94,7 +94,7 @@ jobs:
       rebase: true
   - task: deploy
     attempts: 2
-    file: common-tasks/terraform/0.11.3.yml
+    file: common-tasks/terraform/0.11.11.yml
     input_mapping: { source: bumped-source }
     params:
       command: apply

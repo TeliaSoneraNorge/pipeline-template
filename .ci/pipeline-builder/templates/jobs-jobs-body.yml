@@ -19,15 +19,20 @@
   - put: <service-name>-pr
     params: {path: pull-request-write, status: success}
     
-- name: test-<service-name>
+- name: build-and-test-<service-name>
   plan:
   - aggregate:
+    - get: <infrastructure-service-name>
     - get: <service-name>
       trigger: true
     - get: <infrastructure-service-name>
   - task: test
-    file: <infrastructure-service-name>/.ci/tasks/test-<project-type>/task.yml
-    input_mapping: { source: <service-name> }
+    file: <infrastructure-service-name>/.ci/tasks/build-and-test-<project-type>/task.yml
+    input_mapping:
+      source: <service-name>
+      pipeline-repo: <infrastructure-service-name>
+    output_mapping:
+      build-artefacts: build-artefacts-<service-name>
     on_failure: *slack-failure
     
 - name: sonarqube-<service-name>
@@ -60,7 +65,7 @@
       snyk_token: ((snyk-token))
     on_failure: *slack-failure
     
-- name: build-<service-name>
+- name: build-image-<service-name>
   plan:
   - aggregate:
     - get: <infrastructure-service-name>
@@ -73,7 +78,7 @@
     on_failure: *slack-failure
   - put: <service-name>-image
     params:
-      build: <service-name>
+      build: build-artefacts-<service-name>
       tag_as_latest: true
       additional_tags: tag/image
     get_params: {skip_download: true}
