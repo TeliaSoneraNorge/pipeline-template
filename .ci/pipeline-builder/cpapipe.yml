@@ -1310,4 +1310,3 @@ resources:
       aws_access_key_id: ((telia-common-artifacts-access-key))
       aws_secret_access_key: ((telia-common-artifacts-secret-key))
       aws_session_token: ((telia-common-artifacts-session-token))
-
