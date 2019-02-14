@@ -1,0 +1,20 @@
+platform: linux
+
+image_resource:
+  type: docker-image
+  source:
+    repository: gradle
+    tag: alpine
+
+inputs:
+  - name: source
+  - name: pipeline-repo
+
+caches:
+  - path: .m2/
+
+outputs:
+  - name: build-artefacts
+
+run:
+  path: pipeline-repo/.ci/tasks/build-and-test-java-gradle/task.sh

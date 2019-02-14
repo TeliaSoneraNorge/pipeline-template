@@ -1,6 +1,0 @@
-    - get: <infra-service-name>
-      trigger: true
-      passed: [ integration ]
-    - get: common-tasks
-      params: { submodules: [ terraform ] }
-    - get: version

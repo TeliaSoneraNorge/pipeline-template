@@ -1,4 +1,0 @@
-    - test-<service-name>
-    - sonarqube-<service-name>
-    - snyk-<service-name>
-    - build-<service-name>
