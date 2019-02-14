@@ -2,12 +2,16 @@
 
 
 ## Overview
-Running the [build-pipeline.sh](.ci/pipeline-builder/build-pipeline.sh) \<output filename\> script generates a pipeline with blocks of code for the core pipeline and all the microserives using the parameters supplied in 2 configuration files.
+Running the [build-pipeline.py](.ci/pipeline-builder/build-pipeline.py) \<config-file\> [\<output filename\>] script generates 
+a pipeline with blocks of code for the core pipeline and all the microservices using the parameters supplied in the yaml 
+configuration file.
 
-The overall pipeline template can be found here: [pipeline-template.yml](.ci/pipeline-builder/templates/pipeline-template.yml)  Each block of code may contain a head template that is repeated once and a body template that is repeated once for each microservice.
+The overall pipeline template can be found here: [template-file.yml.j2](.ci/pipeline-builder/templates/template-file.yml.j2)  
 
 ## Contents
 ### Configuration files
+TODO - rewrite below now changed to YAML
+
 [infrastructure.csv](./infrastructure.csv)
 
 This file lists the parameters that are infrastructure or project wide.

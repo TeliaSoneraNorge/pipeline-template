@@ -1,5 +1,0 @@
-    - get: <infra-service-name>
-      passed: [ deploy-stage ]
-    - get: common-tasks
-      params: { submodules: [ terraform ] }
-    - get: version

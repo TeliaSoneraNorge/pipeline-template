@@ -1,3 +1,0 @@
-    - get: <infra-service-name>
-      trigger: true
-      passed: [ deploy-dev ]

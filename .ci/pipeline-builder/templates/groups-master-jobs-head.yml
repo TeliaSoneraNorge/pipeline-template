@@ -1,5 +1,0 @@
-    - test-<infra-service-name>
-    - deploy-dev
-    - integration
-    - deploy-stage
-    - deploy-prod

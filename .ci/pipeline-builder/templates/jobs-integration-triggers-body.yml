@@ -1,4 +1,0 @@
-    - get: <service-name>-image
-      passed: [ deploy-dev ]
-      trigger: true
-      params: { skip_download: true }

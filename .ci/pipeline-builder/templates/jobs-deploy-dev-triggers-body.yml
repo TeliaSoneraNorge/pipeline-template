@@ -1,4 +1,0 @@
-    - get: <service-name>-image
-      passed: [ build-<service-name> ]
-      trigger: true
-      params: { skip_download: true }
