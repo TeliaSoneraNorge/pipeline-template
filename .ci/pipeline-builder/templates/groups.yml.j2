@@ -1,0 +1,20 @@
+groups:
+  - name: Master
+    jobs:
+      - test-{{inf.infrastructure_service_name}}
+      - deploy-dev
+      - integration
+      - deploy-stage
+      - deploy-prod
+{% for microservice in microservice_set %}
+      - build-and-test-{{microservice.service_name}}
+      - sonarqube-{{microservice.service_name}}
+      - snyk-{{microservice.service_name}}
+      - build-image-{{microservice.service_name}}
+{% endfor %}
+  - name: PR
+    jobs:
+      - test-{{inf.infrastructure_service_name}}-pr
+{% for microservice in microservice_set %}
+      - test-{{microservice.service_name}}-pr
+{% endfor %}

@@ -1,0 +1,64 @@
+resources:
+  - name: notify
+    type: slack-notification
+    source:
+      url: ((slack-hook))
+
+  - name: common-tasks
+    type: git
+    source:
+      uri: git@github.com:TeliaSoneraNorge/divx-concourse-tasks.git
+      branch: master
+      private_key: ((aqb-aws-deploy-key))
+
+  - name: {{inf.infrastructure_service_name}}-pr
+    type: pull-request
+    <<: *github-config
+    source:
+      repository: {{inf.repo_name}}
+      access_token: ((teliasoneranorge-access-token))
+
+  - name: {{inf.infrastructure_service_name}}
+    type: git
+    <<: *github-config
+    source:
+      uri: git@github.com:{{inf.repo_name}}.git
+      branch: master
+      private_key: (({{inf.infrastructure_service_name}}-deploy-key))
+
+  # We use a separate resource for writing to work around [ci skip] being ignored.
+  - name: version
+    type: git
+    <<: *github-config
+    source:
+      uri: git@github.com:{{inf.repo_name}}.git
+      branch: master
+      paths: [ terraform ]
+      private_key: (({{inf.infrastructure_service_name}}-deploy-key))
+      disable_ci_skip: true
+
+{% for microservice in microservice_set %}
+  - name: {{microservice.service_name}}-pr
+    type: pull-request
+    <<: *github-config
+    source:
+      repository: {{microservice.repo_name}}
+      access_token: ((teliasoneranorge-access-token))
+
+  - name: {{microservice.service_name}}
+    type: git
+    <<: *github-config
+    source:
+      uri: git@github.com:{{microservice.repo_name}}.git
+      branch: master
+      private_key: (({{microservice.service_name}}-deploy-key))
+
+  - name: {{microservice.service_name}}-image
+    type: docker-image
+    source:
+      repository: "{{microservice.docker_image_repo}}"
+      aws_access_key_id: ((telia-common-artifacts-access-key))
+      aws_secret_access_key: ((telia-common-artifacts-secret-key))
+      aws_session_token: ((telia-common-artifacts-session-token))
+
+{% endfor %}

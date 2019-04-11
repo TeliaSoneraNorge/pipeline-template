@@ -1,0 +1,263 @@
+jobs:
+  - name: test-{{inf.infrastructure_service_name}}-pr
+    plan:
+      - aggregate:
+          - get: common-tasks
+            params: { submodules: [ terraform ] }
+          - get: {{inf.infrastructure_service_name}}-pr
+            trigger: true
+            version: every
+            params: {fetch_merge: true}
+          - get: pull-request-write
+            resource: {{inf.infrastructure_service_name}}-pr
+      - put: {{inf.infrastructure_service_name}}-pr
+        params: {path: pull-request-write, status: pending}
+      - task: test-production
+        file: common-tasks/terraform/0.11.11.yml
+        input_mapping: { source: {{inf.infrastructure_service_name}}-pr }
+        on_failure:
+          put: {{inf.infrastructure_service_name}}-pr
+          params: {path: {{inf.infrastructure_service_name}}-pr, status: failure}
+        params:
+          command: test
+          directories: |
+            terraform/development
+            terraform/staging
+            terraform/production
+      - put: {{inf.infrastructure_service_name}}-pr
+        params: {path: pull-request-write, status: success}
+
+  - name: test-{{inf.infrastructure_service_name}}
+    plan:
+      - aggregate:
+          - get: common-tasks
+            params: { submodules: [ terraform ] }
+          - get: {{inf.infrastructure_service_name}}
+            trigger: true
+      - task: test
+        on_failure: *slack-failure
+        file: common-tasks/terraform/0.11.11.yml
+        input_mapping: { source: {{inf.infrastructure_service_name}} }
+        params:
+          command: test
+          directories: |
+            terraform/development
+            terraform/staging
+            terraform/production
+
+{% for microservice in microservice_set %}
+  - name: test-{{microservice.service_name}}-pr
+    plan:
+      - aggregate:
+          - get: {{microservice.service_name}}-pr
+            trigger: true
+            version: every
+            params: {fetch_merge: true}
+          - get: pull-request-write
+            resource: {{microservice.service_name}}-pr
+          - get: {{inf.infrastructure_service_name}}
+      - put: {{microservice.service_name}}-pr
+        params: {path: pull-request-write, status: pending}
+      - task: test
+        file: {{inf.infrastructure_service_name}}/.ci/tasks/test-{{microservice.project_type}}/task.yml
+        input_mapping: { source: {{microservice.service_name}}-pr }
+        on_failure:
+          put: {{microservice.service_name}}-pr
+          params: {path: {{microservice.service_name}}-pr, status: failure}
+      - put: {{microservice.service_name}}-pr
+        params: {path: pull-request-write, status: success}
+
+  - name: build-and-test-{{microservice.service_name}}
+    plan:
+      - aggregate:
+          - get: {{inf.infrastructure_service_name}}
+          - get: {{microservice.service_name}}
+            trigger: true
+      - task: test
+        file: {{inf.infrastructure_service_name}}/.ci/tasks/build-and-test-{{microservice.project_type}}/task.yml
+        input_mapping:
+          source: {{microservice.service_name}}
+          pipeline-repo: {{inf.infrastructure_service_name}}
+        output_mapping:
+          build-artefacts: build-artefacts-{{microservice.service_name}}
+        on_failure: *slack-failure
+
+  - name: sonarqube-{{microservice.service_name}}
+    plan:
+      - aggregate:
+          - get: {{inf.infrastructure_service_name}}
+          - get: {{microservice.service_name}}
+            passed: [ build-and-test-{{microservice.service_name}} ]
+            trigger: true
+      - task: sonarqube
+        file: {{inf.infrastructure_service_name}}/.ci/tasks/sonarqube-{{microservice.project_type}}/task.yml
+        input_mapping: { source: {{microservice.service_name}} }
+        params:
+          sonarqube_url: https://sonarqube.common-services.telia.io
+          sonarqube_token: ((sonarqube-token-prod))
+          project_name: {{microservice.service_name}}
+        on_failure: *slack-failure
+
+  - name: snyk-{{microservice.service_name}}
+    plan:
+      - aggregate:
+          - get: {{inf.infrastructure_service_name}}
+          - get: {{microservice.service_name}}
+            passed: [ build-and-test-{{microservice.service_name}} ]
+            trigger: true
+      - task: snyk
+        file: {{inf.infrastructure_service_name}}/.ci/tasks/snyk-{{microservice.project_type}}/task.yml
+        input_mapping: { project: {{microservice.service_name}} }
+        params:
+          snyk_token: ((snyk-token))
+        on_failure: *slack-failure
+
+  - name: build-image-{{microservice.service_name}}
+    plan:
+      - aggregate:
+          - get: {{inf.infrastructure_service_name}}
+          - get: {{microservice.service_name}}
+            passed: [ snyk-{{microservice.service_name}}, sonarqube-{{microservice.service_name}} ]
+            trigger: true
+      - task: create-tag
+        file: {{inf.infrastructure_service_name}}/.ci/tasks/create-tag/task.yml
+        input_mapping: { source: {{microservice.service_name}} }
+        on_failure: *slack-failure
+      - put: {{microservice.service_name}}-image
+        params:
+          build: build-artefacts-{{microservice.service_name}}
+          tag_as_latest: true
+          additional_tags: tag/image
+        get_params: {skip_download: true}
+        on_failure: *slack-failure
+
+{% endfor %}
+  - name: deploy-dev
+    serial: true
+    plan:
+      - aggregate:
+        - get: {{inf.infrastructure_service_name}}
+          passed: [ test-{{inf.infrastructure_service_name}} ]
+          trigger: true
+        - get: common-tasks
+          params: { submodules: [ terraform ] }
+        - get: version
+{% for microservice in microservice_set %}
+        - get: {{microservice.service_name}}-image
+          passed: [ build-image-{{microservice.service_name}} ]
+          trigger: true
+          params: { skip_download: true }
+{% endfor %}
+      - aggregate:
+{% with %}
+{% set environment = "development" %}
+{% include 'bumping.yml.j2' %}
+{% endwith %}
+
+      - put: version
+        params:
+          repository: bumped-version/
+          rebase: true
+      - task: deploy
+        attempts: 2
+        file: common-tasks/terraform/0.11.11.yml
+        input_mapping: { source: bumped-source }
+        params:
+          command: apply
+          directories: terraform/development
+          access_key: (({{inf.infrastructure_service_name}}-dev-access-key))
+          secret_key: (({{inf.infrastructure_service_name}}-dev-secret-key))
+          session_token: (({{inf.infrastructure_service_name}}-dev-session-token))
+        on_failure: *slack-failure
+
+  - name: integration
+    plan:
+      - aggregate:
+        - get: {{inf.infrastructure_service_name}}
+          trigger: true
+          passed: [ deploy-dev ]
+{% for microservice in microservice_set %}
+        - get: {{microservice.service_name}}-image
+          passed: [ deploy-dev ]
+          trigger: true
+          params: { skip_download: true }
+{% endfor %}
+      - aggregate:
+          - task: integration-tests
+            file: {{inf.infrastructure_service_name}}/.ci/tasks/integration-tests/task.yml
+            input_mapping: { source: {{inf.infrastructure_service_name}} }
+            on_failure: *slack-failure
+
+  - name: deploy-stage
+    serial: true
+    plan:
+      - aggregate:
+        - get: {{inf.infrastructure_service_name}}
+          trigger: true
+          passed: [ integration ]
+        - get: common-tasks
+          params: { submodules: [ terraform ] }
+        - get: version
+{% for microservice in microservice_set %}
+        - get: {{microservice.service_name}}-image
+          passed: [ integration ]
+          trigger: true
+          params: { skip_download: true }
+{% endfor %}
+      - aggregate:
+{% with %}
+{% set environment = "staging" %}
+{% include 'bumping.yml.j2' %}
+{% endwith %}
+
+      - put: version
+        params:
+          repository: bumped-version/
+          rebase: true
+      - task: deploy
+        attempts: 2
+        file: common-tasks/terraform/0.11.11.yml
+        input_mapping: { source: bumped-source }
+        params:
+          command: apply
+          directories: terraform/staging
+          access_key: (({{inf.infrastructure_service_name}}-stage-access-key))
+          secret_key: (({{inf.infrastructure_service_name}}-stage-secret-key))
+          session_token: (({{inf.infrastructure_service_name}}-stage-session-token))
+        on_failure: *slack-failure
+
+  - name: deploy-prod
+    serial: true
+    plan:
+      - aggregate:
+        - get: {{inf.infrastructure_service_name}}
+          passed: [ deploy-stage ]
+        - get: common-tasks
+          params: { submodules: [ terraform ] }
+        - get: version
+{% for microservice in microservice_set %}
+        - get: {{microservice.service_name}}-image
+          passed: [ deploy-stage ]
+          params: { skip_download: true }
+{% endfor %}
+      - aggregate:
+{% with %}
+{% set environment = "production" %}
+{% include 'bumping.yml.j2' %}
+{% endwith %}
+
+      - put: version
+        params:
+          repository: bumped-version/
+          rebase: true
+      - task: deploy
+        attempts: 2
+        file: common-tasks/terraform/0.11.11.yml
+        input_mapping: { source: bumped-source }
+        params:
+          command: apply
+          directories: terraform/production
+          access_key: (({{inf.infrastructure_service_name}}-prod-access-key))
+          secret_key: (({{inf.infrastructure_service_name}}-prod-secret-key))
+          session_token: (({{inf.infrastructure_service_name}}-prod-session-token))
+        on_failure: *slack-failure

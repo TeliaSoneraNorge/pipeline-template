@@ -1,0 +1,35 @@
+---
+meta:
+  github-config: &github-config
+    check_every: 1m
+    webhook_token: ((git-hub-webhook-token))
+  slack: &slack-config
+    username: 'concourse'
+    channel: {{inf.slack_channel}}
+    icon_url: 'http://cl.ly/image/3e1h0H3H2s0P/concourse-logo.png'
+  failure: &slack-failure
+    put: notify
+    params:
+      <<: *slack-config
+      text: |
+        Build failed:
+        https://concourse.common-services.telia.io/teams/$BUILD_TEAM_NAME/pipelines/$BUILD_PIPELINE_NAME/jobs/$BUILD_JOB_NAME/builds/$BUILD_NAME
+
+{% include 'groups.yml.j2' %}
+
+{% include 'jobs.yml.j2' %}
+
+
+resource_types:
+  - name: slack-notification
+    type: docker-image
+    source:
+      repository: cfcommunity/slack-notification-resource
+      tag: latest
+
+  - name: pull-request
+    type: docker-image
+    source:
+      repository: teliaoss/github-pr-resource
+
+{% include 'resources.yml.j2' %}

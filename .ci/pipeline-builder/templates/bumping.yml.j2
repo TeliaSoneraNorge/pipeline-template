@@ -1,0 +1,9 @@
+        - task: bump-version
+          file: {{inf.infrastructure_service_name}}/.ci/tasks/bump-version.yml
+          input_mapping: { source: version }
+          output_mapping: { bumped-source: bumped-version }
+          params: { environment: {{environment}} }
+        - task: bump-source
+          file: {{inf.infrastructure_service_name}}/.ci/tasks/bump-version.yml
+          input_mapping: { source: <infrastruture-service-name> }
+          params: { environment: {{environment}} }
